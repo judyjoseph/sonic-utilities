@@ -167,23 +167,6 @@ def validate_namespace(namespace):
     else:
         return False
 
-"""In case of Multi-Asic platform, Each ASIC will have a host name and we call it internal hosts.
-   So we loop through the databases in different namespaces and get the hostname
-"""
-def get_all_internal_hosts():
-    internal_hosts = []
-    num_asics = _get_num_asic()
-
-    if is_multi_asic():
-        for asic in range(num_asics):
-            namespace = "{}{}".format(NAMESPACE_PREFIX, asic)
-            config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
-            config_db.connect()
-            metadata = config_db.get_table('DEVICE_METADATA')
-            internal_hosts.append(metadata['localhost']['hostname'])
-
-    return internal_hosts
-
 # Return the namespace where an interface belongs
 def get_intf_namespace(port):
     """If it is a non multi-asic device, or if the interface is management interface
