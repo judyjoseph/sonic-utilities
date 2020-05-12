@@ -78,8 +78,11 @@ def main():
     parser.add_argument('-m', '--mtu', type=int, help='port mtu value in bytes', default=None)
     parser.add_argument('-vv', '--verbose', action='store_true', help='Verbose output', default=False)
     parser.add_argument('-n', '--namespace', metavar='namespace details', type = str, required = False,
-                        help = 'The namespace whose DB instance we need to connect', default=None)
+                        help = 'The asic namespace whose DB instance we need to connect', default=None)
     args = parser.parse_args()
+
+    if args.namespace is not None:
+        swsssdk.SonicDBConfig.load_sonic_global_db_config(namespace=args.namespace)
 
     try:
         port = portconfig(args.verbose, args.port, args.namespace)

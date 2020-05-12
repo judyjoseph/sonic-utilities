@@ -191,7 +191,7 @@ def get_intf_namespace(port):
        it is linux host )
     """
     if is_multi_asic() == False or port == 'eth0':
-        return ''
+        return DEFAULT_NAMESPACE
 
     # If it is PortChannel or Vlan interface or Loopback, user needs to input the namespace.
     if port.startswith("PortChannel") or port.startswith("Vlan") or port.startswith("Loopback"):
@@ -354,7 +354,7 @@ def set_interface_naming_mode(mode):
        represents the linux host. In case of multi-asic, we take the first namespace
        created for the front facing ASIC.
     """
-    namespaces = ['']
+    namespaces = [DEFAULT_NAMESPACE]
     if is_multi_asic:
         namespaces = get_all_namespaces()['front_ns']
 
@@ -995,7 +995,7 @@ def portchannel(ctx, namespace):
         if not validate_namespace(str(namespace)):
             ctx.fail("Invalid Namespace entered {}".format(namespace))
     else:
-        namespace=''
+        namespace=DEFAULT_NAMESPACE
 
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=str(namespace))
     config_db.connect()
@@ -1364,7 +1364,7 @@ def vlan(ctx, redis_unix_socket_path, namespace):
         if not validate_namespace(str(namespace)):
             ctx.fail("Invalid Namespace entered {}".format(namespace))
     else:
-        namespace=''
+        namespace=DEFAULT_NAMESPACE
 
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=str(namespace), **kwargs)
     config_db.connect(wait_for_init=False)
@@ -1766,7 +1766,7 @@ def all(verbose):
        In the case of Multi-Asic platform, we shut only the EBGP sessions with external neighbors.
     """
     log_info("'bgp shutdown all' executing...")
-    namespaces = ['']
+    namespaces = [DEFAULT_NAMESPACE]
     int_hosts = []
     if is_multi_asic:
         ns_list = get_all_namespaces()
@@ -1792,7 +1792,7 @@ def neighbor(ipaddr_or_hostname, verbose):
        User can specify either internal or external BGP neighbor to shutdown
     """
     log_info("'bgp shutdown neighbor {}' executing...".format(ipaddr_or_hostname))
-    namespaces = ['']
+    namespaces = [DEFAULT_NAMESPACE]
     found_neighbor = False
     if is_multi_asic:
         ns_list = get_all_namespaces()
@@ -1823,7 +1823,7 @@ def all(verbose):
        In the case of Multi-Asic platform, we startup only the EBGP sessions with external neighbors.
     """
     log_info("'bgp startup all' executing...")
-    namespaces = ['']
+    namespaces = [DEFAULT_NAMESPACE]
     int_hosts = []
 
     if is_multi_asic:
@@ -1850,7 +1850,7 @@ def neighbor(ipaddr_or_hostname, verbose):
     """Start up BGP session by neighbor IP address or hostname.
        User can specify either internal or external BGP neighbor to startup
     """
-    namespaces = ['']
+    namespaces = [DEFAULT_NAMESPACE]
     found_neighbor = False
 
     if is_multi_asic:
@@ -1884,7 +1884,7 @@ def remove_neighbor(neighbor_ip_or_hostname):
     """Deletes BGP neighbor configuration of given hostname or ip from devices
        User can specify either internal or external BGP neighbor to remove
     """
-    namespaces = ['']
+    namespaces = [DEFAULT_NAMESPACE]
     removed_neighbor = False
 
     if is_multi_asic:
@@ -1917,7 +1917,7 @@ def interface(ctx, namespace):
         if namespace is not None and not validate_namespace(namespace):
             ctx.fail("Invalid Namespace entered {}".format(namespace))
     else:
-        namespace=''
+        namespace=DEFAULT_NAMESPACE
     ctx.obj = {'namespace': None if namespace is None else str(namespace)}
 
 #
