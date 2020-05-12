@@ -187,9 +187,8 @@ def get_intf_namespace(port):
             intf_name = port
 
     # Currently the CONFIG_DB in each namespace is checked to see if the interface exists
-    # This would be changed in future once we have the interface to ASIC mapping stored in global DB.
-    # Global DB is the database docker service running in the linux host.
-
+    # TODO This logic of checking each DB will be updated once the interface to ASIC mapping is
+    # stored in global DB. Global DB is the database docker service running in the linux host.
     ns_list = get_all_namespaces()
     namespaces = ns_list['front_ns'] + ns_list['back_ns']
     for namespace in namespaces:
@@ -979,7 +978,6 @@ def portchannel(ctx, namespace):
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=str(namespace))
     config_db.connect()
     ctx.obj = {'db': config_db, 'namespace': str(namespace)}
-    pass
 
 @portchannel.command('add')
 @click.argument('portchannel_name', metavar='<portchannel_name>', required=True)
@@ -1348,7 +1346,6 @@ def vlan(ctx, redis_unix_socket_path, namespace):
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=str(namespace), **kwargs)
     config_db.connect(wait_for_init=False)
     ctx.obj = {'db': config_db, 'namespace': str(namespace)}
-    pass
 
 @vlan.command('add')
 @click.argument('vid', metavar='<vid>', required=True, type=int)
@@ -1825,7 +1822,7 @@ def startup(ctx, interface_name):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -1865,7 +1862,7 @@ def shutdown(ctx, interface_name):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -1905,7 +1902,7 @@ def speed(ctx, interface_name, interface_speed, verbose):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -1960,7 +1957,7 @@ def mtu(ctx, interface_name, interface_mtu, verbose):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -2001,7 +1998,7 @@ def add(ctx, interface_name, ip_addr, gw):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -2067,7 +2064,7 @@ def remove(ctx, interface_name, ip_addr):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -2119,12 +2116,22 @@ def transceiver(ctx):
 @click.pass_context
 def lpmode(ctx, interface_name, state):
     """Enable/disable low-power mode for SFP transceiver module"""
+    namespace = ctx.obj['namespace']
+    if  is_multi_asic() and namespace is None:
+        ns = get_intf_namespace(interface_name)
+        if ns is None:
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
+        else:
+            namespace = ns
+    config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
+    config_db.connect()
+
     if get_interface_naming_mode() == "alias":
-        interface_name = interface_alias_to_name(interface_name)
+        interface_name = interface_alias_to_name(config_db, interface_name)
         if interface_name is None:
             ctx.fail("'interface_name' is None!")
 
-    if interface_name_is_valid(interface_name) is False:
+    if interface_name_is_valid(config_db, interface_name) is False:
         ctx.fail("Interface name is invalid. Please enter a valid interface name!!")
 
     cmd = "sudo sfputil lpmode {} {}".format("on" if state == "enable" else "off", interface_name)
@@ -2139,12 +2146,22 @@ def lpmode(ctx, interface_name, state):
 @click.pass_context
 def reset(ctx, interface_name):
     """Reset SFP transceiver module"""
+    namespace = ctx.obj['namespace']
+    if  is_multi_asic() and namespace is None:
+        ns = get_intf_namespace(interface_name)
+        if ns is None:
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
+        else:
+            namespace = ns
+    config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
+    config_db.connect()
+
     if get_interface_naming_mode() == "alias":
-        interface_name = interface_alias_to_name(interface_name)
+        interface_name = interface_alias_to_name(config_db, interface_name)
         if interface_name is None:
             ctx.fail("'interface_name' is None!")
 
-    if interface_name_is_valid(interface_name) is False:
+    if interface_name_is_valid(config_db, interface_name) is False:
         ctx.fail("Interface name is invalid. Please enter a valid interface name!!")
 
     cmd = "sudo sfputil reset {}".format(interface_name)
@@ -2174,7 +2191,7 @@ def bind(ctx, interface_name, vrf_name):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -2197,7 +2214,7 @@ def bind(ctx, interface_name, vrf_name):
         config_db.set_entry(table_name, interface_del, None)
     config_db.set_entry(table_name, interface_name, None)
     # When config_db del entry and then add entry with same key, the DEL will lost.
-    state_db = SonicV2Connector(host='127.0.0.1', use_unix_socket_path=True, namespace=namespace)
+    state_db = SonicV2Connector(use_unix_socket_path=True, namespace=namespace)
     state_db.connect(state_db.STATE_DB, False)
     _hash = '{}{}'.format('INTERFACE_TABLE|', interface_name)
     while state_db.get(state_db.STATE_DB, _hash, "state") == "ok":
@@ -2218,7 +2235,7 @@ def unbind(ctx, interface_name):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
@@ -2657,11 +2674,12 @@ def asymmetric(ctx, interface_name, status):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
     config_db.connect()
+
     if get_interface_naming_mode() == "alias":
         interface_name = interface_alias_to_name(config_db, interface_name)
         if interface_name is None:
@@ -2684,13 +2702,14 @@ def priority(ctx, interface_name, priority, status):
     if  is_multi_asic() and namespace is None:
         ns = get_intf_namespace(interface_name)
         if ns is None:
-            ctx.fail("namespace [-n] option required to modify interface {}".format(interface_name))
+            ctx.fail("namespace [-n] option required to configure interface {}".format(interface_name))
         else:
             namespace = ns
     config_db = ConfigDBConnector(use_unix_socket_path=True, namespace=namespace)
     config_db.connect()
+
     if get_interface_naming_mode() == "alias":
-        interface_name = interface_alias_to_name(interface_name)
+        interface_name = interface_alias_to_name(config_db, interface_name)
         if interface_name is None:
             ctx.fail("'interface_name' is None!")
     
