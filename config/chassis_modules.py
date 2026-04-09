@@ -224,14 +224,14 @@ if is_switch_bmc():
     @click.argument('chassis_module_name', metavar='<module_name>', required=True)
     @click.argument('seconds', metavar='<seconds>', required=True, type=float)
     def set_power_on_delay(db, chassis_module_name, seconds):
-        """Configure delay (in seconds) BMC waits before powering on Switch-Host (default: 0)"""
+        """Configure delay (in seconds) BMC waits before powering on Switch-Host (default: -1, Switch-Host remains powered off)"""
         ctx = click.get_current_context()
 
         if not chassis_module_name.startswith("SWITCH-HOST"):
             ctx.fail("'power-on-delay' is only applicable to SWITCH-HOST modules")
 
-        if seconds < 0:
-            ctx.fail("'seconds' must be a non-negative value")
+        if seconds < -1:
+            ctx.fail("'seconds' must be -1 (Switch-Host remains powered off) or a non-negative value")
 
         config_db = db.cfgdb
         fvs = config_db.get_entry('CHASSIS_MODULE', chassis_module_name) or {}
@@ -258,6 +258,6 @@ if is_switch_bmc():
 
         config_db = db.cfgdb
         fvs = config_db.get_entry('CHASSIS_MODULE', chassis_module_name) or {}
-        fvs['shutdown_timeout'] = str(seconds)
+        fvs['graceful_shutdown_timeout'] = str(seconds)
         config_db.set_entry('CHASSIS_MODULE', chassis_module_name, fvs)
         click.echo(f"Shutdown-timeout for {chassis_module_name} set to {seconds} seconds")

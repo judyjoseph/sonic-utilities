@@ -609,12 +609,26 @@ class TestChassisModuleTimingConfig(object):
         entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
         assert entry.get("power_on_delay") == "0.0"
 
-    def test_power_on_delay_negative_rejected(self):
+    def test_power_on_delay_minus_one_allowed(self):
+        """Power-on-delay of -1 is valid (means Switch-Host remains powered off)."""
         runner = CliRunner()
         db = Db()
         result = runner.invoke(
             self.modules.commands["power-on-delay"],
             ["SWITCH-HOST", "-1"],
+            obj=db
+        )
+        print(result.output)
+        assert result.exit_code == 0
+        entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
+        assert entry.get("power_on_delay") == "-1.0"
+
+    def test_power_on_delay_below_minus_one_rejected(self):
+        runner = CliRunner()
+        db = Db()
+        result = runner.invoke(
+            self.modules.commands["power-on-delay"],
+            ["SWITCH-HOST", "-2"],
             obj=db
         )
         print(result.output)
@@ -644,7 +658,7 @@ class TestChassisModuleTimingConfig(object):
         assert result.exit_code == 0
         assert "120" in result.output
         entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
-        assert entry.get("shutdown_timeout") == "120.0"
+        assert entry.get("graceful_shutdown_timeout") == "120.0"
 
     def test_shutdown_timeout_zero_immediate_poweroff(self):
         runner = CliRunner()
@@ -657,7 +671,7 @@ class TestChassisModuleTimingConfig(object):
         print(result.output)
         assert result.exit_code == 0
         entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
-        assert entry.get("shutdown_timeout") == "0.0"
+        assert entry.get("graceful_shutdown_timeout") == "0.0"
 
     def test_shutdown_timeout_negative_rejected(self):
         runner = CliRunner()
@@ -698,7 +712,7 @@ class TestChassisModuleTimingConfig(object):
         )
         entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
         assert entry.get("power_on_delay") == "60.0"
-        assert entry.get("shutdown_timeout") == "30.0"
+        assert entry.get("graceful_shutdown_timeout") == "30.0"
 
     @classmethod
     def teardown_class(cls):
