@@ -222,7 +222,7 @@ if is_switch_bmc():
     @modules.command('power-on-delay')
     @clicommon.pass_db
     @click.argument('chassis_module_name', metavar='<module_name>', required=True)
-    @click.argument('seconds', metavar='<seconds>', required=True, type=float)
+    @click.argument('seconds', metavar='<seconds>', required=True, type=int)
     def set_power_on_delay(db, chassis_module_name, seconds):
         """Configure delay (in seconds) BMC waits before powering on Switch-Host (default: -1, Switch-Host remains powered off)"""
         ctx = click.get_current_context()
@@ -245,8 +245,8 @@ if is_switch_bmc():
     @modules.command('shutdown-timeout')
     @clicommon.pass_db
     @click.argument('chassis_module_name', metavar='<module_name>', required=True)
-    @click.argument('seconds', metavar='<seconds>', required=True, type=float)
-    def set_shutdown_timeout(db, chassis_module_name, seconds):
+    @click.argument('seconds', metavar='<seconds>', required=True, type=int)
+    def set_graceful_shutdown_timeout(db, chassis_module_name, seconds):
         """Configure graceful-shutdown timeout (in seconds) before BMC forces power-off (default: 120)"""
         ctx = click.get_current_context()
 
