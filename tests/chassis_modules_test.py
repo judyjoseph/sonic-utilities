@@ -609,26 +609,12 @@ class TestChassisModuleTimingConfig(object):
         entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
         assert entry.get("power_on_delay") == "0"
 
-    def test_power_on_delay_minus_one_allowed(self):
-        """Power-on-delay of -1 is valid (means Switch-Host remains powered off)."""
+    def test_power_on_delay_negative_rejected(self):
         runner = CliRunner()
         db = Db()
         result = runner.invoke(
             self.modules.commands["power-on-delay"],
             ["SWITCH-HOST", "-1"],
-            obj=db
-        )
-        print(result.output)
-        assert result.exit_code == 0
-        entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
-        assert entry.get("power_on_delay") == "-1"
-
-    def test_power_on_delay_below_minus_one_rejected(self):
-        runner = CliRunner()
-        db = Db()
-        result = runner.invoke(
-            self.modules.commands["power-on-delay"],
-            ["SWITCH-HOST", "-2"],
             obj=db
         )
         print(result.output)
