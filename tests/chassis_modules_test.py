@@ -578,7 +578,7 @@ class TestChassisModuleTimingConfig(object):
         os.environ["UTILITIES_UNIT_TESTING"] = "1"
         import importlib
         import config.chassis_modules as cm
-        with mock.patch('config.chassis_modules.is_switch_bmc', return_value=True):
+        with mock.patch('sonic_py_common.device_info.is_switch_bmc', new=lambda: True):
             importlib.reload(cm)
         cls.modules = cm.modules
 
@@ -699,6 +699,104 @@ class TestChassisModuleTimingConfig(object):
         entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
         assert entry.get("power_on_delay") == "60"
         assert entry.get("graceful_shutdown_timeout") == "30"
+
+    @classmethod
+    def teardown_class(cls):
+        print("TEARDOWN")
+        os.environ["UTILITIES_UNIT_TESTING"] = "0"
+
+
+class TestChassisModuleBMCStartupShutdown(object):
+    """Tests for startup/shutdown of SWITCH-HOST on BMC:
+    - default admin_status is 'down' when no entry exists
+    - startup/shutdown use mod_entry to preserve power_on_delay and graceful_shutdown_timeout
+    """
+
+    @classmethod
+    def setup_class(cls):
+        print("SETUP")
+        os.environ["UTILITIES_UNIT_TESTING"] = "1"
+
+    def test_default_state_is_down_on_bmc(self):
+        """SWITCH-HOST has no entry in CONFIG_DB; on BMC the default must be 'down'."""
+        from config.chassis_modules import get_config_module_state
+        db = Db()
+        with mock.patch('config.chassis_modules.is_switch_bmc', return_value=True):
+            state = get_config_module_state(db, "SWITCH-HOST")
+        assert state == 'down'
+
+    def test_startup_switch_host_preserves_timing_fields(self):
+        """startup SWITCH-HOST on BMC must not erase power_on_delay or graceful_shutdown_timeout."""
+        runner = CliRunner()
+        db = Db()
+        db.cfgdb.mod_entry('CHASSIS_MODULE', 'SWITCH-HOST', {
+            'admin_status': 'down',
+            'power_on_delay': '300',
+            'graceful_shutdown_timeout': '120',
+        })
+        with mock.patch('config.chassis_modules.is_switch_bmc', return_value=True):
+            result = runner.invoke(
+                config.config.commands["chassis"].commands["modules"].commands["startup"],
+                ["SWITCH-HOST"],
+                obj=db
+            )
+        print(result.output)
+        assert result.exit_code == 0
+        entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
+        assert entry.get("admin_status") == "up"
+        assert entry.get("power_on_delay") == "300", "power_on_delay must be preserved"
+        assert entry.get("graceful_shutdown_timeout") == "120", "graceful_shutdown_timeout must be preserved"
+
+    def test_shutdown_switch_host_preserves_timing_fields(self):
+        """shutdown SWITCH-HOST on BMC must not erase power_on_delay or graceful_shutdown_timeout."""
+        runner = CliRunner()
+        db = Db()
+        db.cfgdb.mod_entry('CHASSIS_MODULE', 'SWITCH-HOST', {
+            'admin_status': 'up',
+            'power_on_delay': '60',
+            'graceful_shutdown_timeout': '30',
+        })
+        with mock.patch('config.chassis_modules.is_switch_bmc', return_value=True):
+            result = runner.invoke(
+                config.config.commands["chassis"].commands["modules"].commands["shutdown"],
+                ["SWITCH-HOST"],
+                obj=db
+            )
+        print(result.output)
+        assert result.exit_code == 0
+        entry = db.cfgdb.get_entry("CHASSIS_MODULE", "SWITCH-HOST")
+        assert entry.get("admin_status") == "down"
+        assert entry.get("power_on_delay") == "60", "power_on_delay must be preserved"
+        assert entry.get("graceful_shutdown_timeout") == "30", "graceful_shutdown_timeout must be preserved"
+
+    def test_startup_switch_host_already_up_is_noop(self):
+        """startup SWITCH-HOST when already up should print a message and return."""
+        runner = CliRunner()
+        db = Db()
+        db.cfgdb.mod_entry('CHASSIS_MODULE', 'SWITCH-HOST', {'admin_status': 'up'})
+        with mock.patch('config.chassis_modules.is_switch_bmc', return_value=True):
+            result = runner.invoke(
+                config.config.commands["chassis"].commands["modules"].commands["startup"],
+                ["SWITCH-HOST"],
+                obj=db
+            )
+        print(result.output)
+        assert result.exit_code == 0
+        assert "already" in result.output
+
+    def test_shutdown_switch_host_already_down_is_noop(self):
+        """shutdown SWITCH-HOST when already down (no entry) should print a message and return."""
+        runner = CliRunner()
+        db = Db()
+        with mock.patch('config.chassis_modules.is_switch_bmc', return_value=True):
+            result = runner.invoke(
+                config.config.commands["chassis"].commands["modules"].commands["shutdown"],
+                ["SWITCH-HOST"],
+                obj=db
+            )
+        print(result.output)
+        assert result.exit_code == 0
+        assert "already" in result.output
 
     @classmethod
     def teardown_class(cls):
