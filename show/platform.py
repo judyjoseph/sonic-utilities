@@ -320,11 +320,6 @@ def _get_state_db():
     return state_db
 
 
-def _get_config_db():
-    from sonic_py_common.multi_asic import get_config_db
-    return get_config_db()
-
-
 # 'leak' group ("show platform leak ...")
 @platform.group()
 def leak():
@@ -349,7 +344,7 @@ def leak_control_policy():
         rack_minor_action = entry.get('rack_mgr_minor_alert_action', 'syslog_only')
         click.echo(" rack_mgr_minor_alert_action     : {}".format(rack_minor_action))
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: Failed to retrieve leak control policy: {e}", err=True)
 
 
 @leak.group('rack-manager')
@@ -377,7 +372,7 @@ def leak_rack_manager_alerts():
         else:
             click.echo("No rack-manager alerts found")
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: Failed to retrieve rack-manager leak alerts: {e}", err=True)
 
 
 @leak.command('profiles')
@@ -398,7 +393,7 @@ def leak_profiles():
         else:
             click.echo("No leak profiles found")
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: Failed to retrieve leak sensor profiles: {e}", err=True)
 
 
 @leak.command('status')
@@ -422,4 +417,4 @@ def leak_status():
         else:
             click.echo("No leak sensor data found")
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        click.echo(f"Error: Failed to retrieve leak sensor status: {e}", err=True)
