@@ -95,6 +95,40 @@ def config():
         click.echo("Kdump ssh connection string and ssh_path not found")
 
 
+#
+# 'runtime' subcommand (show kdump runtime)
+#
+@kdump.command(name="runtime", short_help="Show the zero-downtime runtime crash-kernel reservation")
+def runtime():
+    """Show the runtime (no-reboot) crash-kernel reservation state.
+
+    Displays the CONFIG_DB intent (config kdump arm-now) alongside the live
+    state reported by the in-tree sonic_kdump_runtime driver.
+    """
+    arm = get_kdump_config("runtime_arm")
+    high_mb = get_kdump_config("runtime_high_memory")
+    low_mb = get_kdump_config("runtime_low_memory")
+
+    admin_arm = "Enabled" if str(arm).lower() == "true" else "Disabled"
+    click.echo("Runtime reservation (config): {}".format(admin_arm))
+    click.echo("Requested high memory (MB): {}".format(high_mb))
+    click.echo("Requested low memory (MB): {}".format(low_mb))
+
+    state_file = "/sys/kernel/kdump_runtime/state"
+    if os.path.exists(state_file):
+        click.echo("")
+        click.echo("Driver state:")
+        try:
+            with open(state_file, "r") as fp:
+                click.echo(fp.read().rstrip("\n"))
+        except OSError as e:
+            click.echo("Unable to read {}: {}".format(state_file, e))
+    else:
+        click.echo("")
+        click.echo("Driver state: sonic_kdump_runtime driver not present "
+                   "(kernel without CONFIG_SONIC_KDUMP_RUNTIME).")
+
+
 def get_kdump_core_files():
     """Retrieves the kernel core dump files from directory '/var/crash/'.
 

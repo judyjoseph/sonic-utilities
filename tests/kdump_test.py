@@ -272,6 +272,58 @@ class TestKdump:
         assert result.exit_code == 0
         assert "SSH path removed from KDUMP configuration." in result.output
 
+    def test_config_kdump_arm_now(self, get_cmd_module):
+        (config, show) = get_cmd_module
+        db = Db()
+        runner = CliRunner()
+
+        # Default sizes (high=512, low=0)
+        result = runner.invoke(config.config.commands["kdump"].commands["arm-now"], obj=db)
+        assert result.exit_code == 0
+        kdump_config = db.cfgdb.get_table("KDUMP")["config"]
+        assert kdump_config["runtime_arm"] == "true"
+        assert kdump_config["runtime_high_memory"] == "512"
+        assert kdump_config["runtime_low_memory"] == "0"
+
+        # Explicit high and low sizes
+        result = runner.invoke(
+            config.config.commands["kdump"].commands["arm-now"],
+            ["--high", "1024", "--low", "256"],
+            obj=db
+        )
+        assert result.exit_code == 0
+        kdump_config = db.cfgdb.get_table("KDUMP")["config"]
+        assert kdump_config["runtime_high_memory"] == "1024"
+        assert kdump_config["runtime_low_memory"] == "256"
+
+        # Both sizes zero is rejected
+        result = runner.invoke(
+            config.config.commands["kdump"].commands["arm-now"],
+            ["--high", "0", "--low", "0"],
+            obj=db
+        )
+        assert result.exit_code == 1
+
+        # Missing KDUMP table is an error
+        db.cfgdb.delete_table("KDUMP")
+        result = runner.invoke(config.config.commands["kdump"].commands["arm-now"], obj=db)
+        assert result.exit_code == 1
+
+    def test_config_kdump_disarm_now(self, get_cmd_module):
+        (config, show) = get_cmd_module
+        db = Db()
+        runner = CliRunner()
+
+        db.cfgdb.mod_entry("KDUMP", "config", {"runtime_arm": "true"})
+        result = runner.invoke(config.config.commands["kdump"].commands["disarm-now"], obj=db)
+        assert result.exit_code == 0
+        assert db.cfgdb.get_table("KDUMP")["config"]["runtime_arm"] == "false"
+
+        # Missing KDUMP table is an error
+        db.cfgdb.delete_table("KDUMP")
+        result = runner.invoke(config.config.commands["kdump"].commands["disarm-now"], obj=db)
+        assert result.exit_code == 1
+
     @classmethod
     def teardown_class(cls):
         print("TEARDOWN")

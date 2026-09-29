@@ -38,6 +38,15 @@ kdump_cfg = "/etc/default/kdump-tools"
 kdump_mem_file = "/sys/kernel/kexec_crash_size"
 machine_cfg = "/host/machine.conf"
 
+# Zero-downtime runtime kdump: sysfs interface exposed by the in-tree
+# sonic_kdump_runtime driver (CONFIG_SONIC_KDUMP_RUNTIME=y). Writing sizes here
+# reserves crash-kernel memory on a running kernel with no reboot and no
+# crashkernel= boot parameter.
+kdump_runtime_dir = "/sys/kernel/kdump_runtime"
+kdump_runtime_reserve = kdump_runtime_dir + "/reserve"
+kdump_runtime_release = kdump_runtime_dir + "/release"
+kdump_runtime_state = kdump_runtime_dir + "/state"
+
 ## Same as print(), but output to stderr instead of stdout
 def print_err(*args):
     sys.stderr.write(' '.join(map(str,args)) + '\n')
@@ -926,6 +935,107 @@ def cmd_kdump_ssh_path(verbose, ssh_path):
         write_ssh_path(ssh_path)
         print("SSH path updated. Changes will take effect after reboot.")
 
+def is_kdump_runtime_available():
+    """Check whether the in-tree sonic_kdump_runtime driver is present.
+
+    Returns:
+      True if /sys/kernel/kdump_runtime/reserve exists, else False.
+    """
+    return os.path.exists(kdump_runtime_reserve)
+
+
+def cmd_kdump_reserve_runtime(verbose, high_mb, low_mb):
+    """Reserve crash-kernel memory on the running kernel (no reboot).
+
+    Writes "<high_mb>,<low_mb>" to the sonic_kdump_runtime sysfs node, which
+    carves contiguous RAM and publishes crashk_res (and crashk_low_res when
+    low_mb > 0), then loads the capture kernel so kdump is armed immediately.
+
+    Args:
+      verbose: If True, print additional information.
+      high_mb: Size in MB of the high (>4GB allowed) region -> crashk_res.
+      low_mb: Size in MB of the low (<4GB) region -> crashk_low_res (0 = skip).
+    """
+    if not is_kdump_runtime_available():
+        sys.exit("Runtime kdump reservation is not available on this image. "
+                 "It requires a kernel built with CONFIG_SONIC_KDUMP_RUNTIME=y "
+                 "(sonic_kdump_runtime driver).")
+
+    if high_mb <= 0 and low_mb <= 0:
+        sys.exit("At least one of high/low memory (in MB) must be > 0.")
+
+    request = "%d,%d" % (high_mb, low_mb)
+    if verbose:
+        print("Reserving crash-kernel memory at runtime: high=%d MB low=%d MB" % (high_mb, low_mb))
+
+    try:
+        with open(kdump_runtime_reserve, "w") as fp:
+            fp.write(request)
+    except (IOError, OSError) as e:
+        sys.exit("Failed to write runtime reservation '%s' to %s: %s"
+                 % (request, kdump_runtime_reserve, str(e)))
+
+    # Confirm the kernel accounted for the reservation.
+    reserved = 0
+    try:
+        with open(kdump_mem_file, "r") as fp:
+            reserved = int(fp.read().strip())
+    except (IOError, OSError, ValueError):
+        reserved = 0
+
+    if reserved <= 0:
+        sys.exit("Runtime reservation did not take effect (kexec_crash_size=0). "
+                 "Low memory may be too fragmented; try a smaller size.")
+
+    print("Reserved %d bytes for the capture kernel at runtime (no reboot)." % reserved)
+
+    # Arm the capture kernel against the fresh reservation.
+    write_use_kdump(1)
+    (rc, lines, err_str) = run_command("/usr/sbin/kdump-config load", use_shell=False)
+    if rc == 0:
+        print("Capture kernel loaded. Kdump is armed with no reboot.")
+    else:
+        print_err("Reservation succeeded but 'kdump-config load' failed (rc=%d). "
+                  "On images without crashkernel= on the cmdline, the kdump-tools "
+                  "load guard may need the runtime path enabled." % rc)
+
+
+def cmd_kdump_unreserve_runtime(verbose):
+    """Release a runtime crash-kernel reservation and disarm kdump.
+
+    Args:
+      verbose: If True, print additional information.
+    """
+    if not is_kdump_runtime_available():
+        sys.exit("Runtime kdump reservation is not available on this image.")
+
+    # Unload the capture kernel first so nothing references the memory.
+    run_command("/usr/sbin/kdump-config unload", use_shell=False)
+    write_use_kdump(0)
+
+    try:
+        with open(kdump_runtime_release, "w") as fp:
+            fp.write("1")
+    except (IOError, OSError) as e:
+        sys.exit("Failed to release runtime reservation via %s: %s"
+                 % (kdump_runtime_release, str(e)))
+
+    print("Released the runtime crash-kernel reservation (no reboot).")
+
+
+def cmd_kdump_runtime_status():
+    """Print the current runtime reservation state from the driver."""
+    if not is_kdump_runtime_available():
+        print("Runtime kdump reservation: not available "
+              "(kernel without CONFIG_SONIC_KDUMP_RUNTIME).")
+        return
+    try:
+        with open(kdump_runtime_state, "r") as fp:
+            sys.stdout.write(fp.read())
+    except (IOError, OSError) as e:
+        print_err("Unable to read %s: %s" % (kdump_runtime_state, str(e)))
+
+
 def main():
 
     # Only privileged users can execute this command
@@ -981,6 +1091,22 @@ def main():
     parser.add_argument('--memory', nargs='?', type=str, action='store', default=False,
         help='Amount of memory reserved for the capture kernel')
 
+    # Zero-downtime runtime reservation (no reboot, no crashkernel=)
+    parser.add_argument('--reserve-runtime', action='store_true', default=False,
+        help='Reserve crash-kernel memory on the running kernel and arm kdump (no reboot)')
+
+    parser.add_argument('--unreserve-runtime', action='store_true', default=False,
+        help='Release a runtime crash-kernel reservation and disarm kdump (no reboot)')
+
+    parser.add_argument('--runtime-status', action='store_true', default=False,
+        help='Show the current runtime crash-kernel reservation state')
+
+    parser.add_argument('--high-memory', nargs='?', type=int, action='store', default=512,
+        help='High region size in MB for --reserve-runtime (default 512)')
+
+    parser.add_argument('--low-memory', nargs='?', type=int, action='store', default=0,
+        help='Low (<4GB) region size in MB for --reserve-runtime (default 0 = skip)')
+
     # Show more information (used for sonic-kdump-config status)
     parser.add_argument("-v", "--verbose", action='store_true',
         help='displays detailed kdump status information. Used with status command.')
@@ -1010,6 +1136,12 @@ def main():
             changed = cmd_kdump_disable(options.verbose)
         elif options.memory != False:
             cmd_kdump_memory(options.verbose, options.memory)
+        elif options.reserve_runtime:
+            cmd_kdump_reserve_runtime(options.verbose, options.high_memory, options.low_memory)
+        elif options.unreserve_runtime:
+            cmd_kdump_unreserve_runtime(options.verbose)
+        elif options.runtime_status:
+            cmd_kdump_runtime_status()
         elif options.remote:
             cmd_kdump_remote(options.verbose)
         elif options.ssh_string:

@@ -83,6 +83,54 @@ def kdump_memory(db, kdump_memory):
     echo_reboot_warning()
 
 #
+# 'arm-now' command ('sudo config kdump arm-now ...')
+#
+
+
+@kdump.command(name="arm-now", help="Reserve crash-kernel memory on the running kernel (no reboot)")
+@click.option('--high', 'high_mb', type=int, default=512, show_default=True,
+              help="High region size in MB (crashk_res)")
+@click.option('--low', 'low_mb', type=int, default=0, show_default=True,
+              help="Low (<4GB) region size in MB (crashk_low_res); 0 to skip")
+@pass_db
+def kdump_arm_now(db, high_mb, low_mb):
+    """Arm kdump at runtime with no reboot and no crashkernel= boot argument.
+
+    Sets the runtime reservation intent in CONFIG_DB. hostcfgd reacts by
+    invoking sonic-kdump-config --reserve-runtime, which carves memory via the
+    in-tree sonic_kdump_runtime driver and loads the capture kernel.
+    """
+    kdump_table = db.cfgdb.get_table("KDUMP")
+    check_kdump_table_existence(kdump_table)
+
+    if high_mb <= 0 and low_mb <= 0:
+        click.echo("At least one of --high or --low must be greater than 0 (MB).")
+        sys.exit(1)
+
+    db.cfgdb.mod_entry("KDUMP", "config", {
+        "runtime_arm": "true",
+        "runtime_high_memory": str(high_mb),
+        "runtime_low_memory": str(low_mb),
+    })
+    click.echo("Runtime crash-kernel reservation requested (high={} MB, low={} MB).".format(high_mb, low_mb))
+    click.echo("This takes effect with no reboot. Use 'show kdump runtime' to verify.")
+
+#
+# 'disarm-now' command ('sudo config kdump disarm-now')
+#
+
+
+@kdump.command(name="disarm-now", help="Release the runtime crash-kernel reservation (no reboot)")
+@pass_db
+def kdump_disarm_now(db):
+    """Release a runtime reservation made with 'config kdump arm-now'."""
+    kdump_table = db.cfgdb.get_table("KDUMP")
+    check_kdump_table_existence(kdump_table)
+
+    db.cfgdb.mod_entry("KDUMP", "config", {"runtime_arm": "false"})
+    click.echo("Runtime crash-kernel reservation released (no reboot).")
+
+#
 # 'num_dumps' command ('sudo config kdump num_dumps ...')
 #
 
